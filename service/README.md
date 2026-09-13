@@ -95,20 +95,20 @@ curl -s http://localhost:8000/info
 
 | Variable              | Default                  | Meaning                                                                                   |
 |-----------------------|--------------------------|-------------------------------------------------------------------------------------------|
-| `LLM_BACKEND`         | `openrouter`             | `openrouter` or `ollama`                                                                  |
-| `OPENROUTER_API_KEY`  | —                        | key for the OpenRouter backend                                                            |
-| `OPENROUTER_MODEL`    | —                        | OpenRouter model id                                                                       |
-| `OLLAMA_HOST`         | `http://localhost:11434` | Ollama server URL                                                                         |
-| `OLLAMA_MODEL`        | —                        | Ollama model tag                                                                          |
-| `VOCAB_PATH`          | from `llm_config.txt`    | archaeological vocabulary JSON                                                            |
-| `MAX_UPLOAD_MB`       | `10`                     | canonical upload limit                                                                    |
-| `ALLOWED_ORIGINS`     | `*`                      | CSV of CORS origins                                                                       |
-| `LLM_TIMEOUT`         | `300`                    | per-call read timeout (s)                                                                 |
 | `PORT`                | `8000`                   | port the service **binds**, and the one `service/healthcheck.py` probes (issues #55, #58) |
 | `HOST`                | `0.0.0.0`                | bind address (issue #58). ⚠️ see the warning below                                        |
 | `GRACEFUL_SHUTDOWN_S` | `20`                     | seconds uvicorn waits for in-flight requests (issue #55)                                  |
 | `RELOAD`              | `false`                  | filesystem auto-reload — development only                                                 |
 | `LOG_LEVEL`           | `INFO`                   | root logger level for the `python -m service.api` start path (issue #61)                  |
+| `ALLOWED_ORIGINS`     | `*`                      | CSV of CORS origins                                                                       |
+| `MAX_UPLOAD_MB`       | `10`                     | canonical upload limit — no shared default across the five services                       |
+| `LLM_BACKEND`         | `openrouter`             | `openrouter` or `ollama`                                                                  |
+| `OPENROUTER_API_KEY`  | —                        | **required, secret** — key for the OpenRouter backend                                     |
+| `OPENROUTER_MODEL`    | —                        | **required** — OpenRouter model id                                                        |
+| `OLLAMA_HOST`         | `http://localhost:11434` | Ollama server URL                                                                         |
+| `OLLAMA_MODEL`        | —                        | **required** for the ollama backend — Ollama model tag                                    |
+| `LLM_TIMEOUT`         | `300`                    | per-call read timeout (s)                                                                 |
+| `LLM_MAX_RETRIES`     | `3`                      | retries on a failed call                                                                  |
 
 `PORT` and `HOST` are read by `service/api.py`'s `__main__` block, which is what the `api`
 image's `ENTRYPOINT` (`python -m service.api`) runs. Before issue #58 the entrypoint baked

@@ -77,6 +77,20 @@ services:
     build:
       context: .
       target: api
+    # env_file delivers every OTHER variable in .env.example into the container --
+    # LOG_LEVEL, GRACEFUL_SHUTDOWN_S, HOST, RELOAD, HEALTHCHECK_PATH, LLM_TIMEOUT,
+    # LLM_MAX_RETRIES, LLM_CONFIG and the OpenRouter attribution headers were all
+    # documented but undeliverable under compose until atrium-project#60 added this.
+    # `required: false` because .env is gitignored -- a fresh clone has none and
+    # compose must still start. The explicit environment: entries below are KEPT
+    # because they need a value DIFFERENT from a bare pass-through: compose itself
+    # needs PORT for the ports: mapping below, and OLLAMA_HOST's compose default
+    # (host.docker.internal) deliberately differs from the code default
+    # (localhost, which is wrong inside a container) -- see docs/k8s_deployment.md's
+    # "two defaults" callout in the hub.
+    env_file:
+      - path: .env
+        required: false
     environment:
       LLM_BACKEND: ${LLM_BACKEND:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
