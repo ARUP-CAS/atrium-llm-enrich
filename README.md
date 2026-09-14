@@ -236,10 +236,10 @@ python3 openrouter_client.py --input sample.csv --model <model> --provider-data-
 
 Two input modes, dispatched by file extension:
 
-| Extension              | Mode           | One API call per… |
-|------------------------|----------------|-------------------|
-| `.csv`, `*.teitok.xml` | Line-level     | qualifying line   |
-| `.md`, `.txt`          | Whole-document | document          |
+| Extension              | Mode           | One API call per…                                      |
+|------------------------|----------------|--------------------------------------------------------|
+| `.csv`, `*.teitok.xml` | Line-level     | qualifying line                                        |
+| `.md`, `.txt`          | Whole-document | document                                               |
 | `.pdf`, `.docx`        | Whole-document | document (auto-converted to visually-rich `.md` first) |
 
 `.pdf`/`.docx` files in `INPUT_DIR` are **auto-converted** to visually-rich Markdown on the fly
@@ -392,11 +392,11 @@ sanity-checked at load — an insufficient setting logs a warning with the sugge
 
 Worked recipes (UFAL cluster):
 
-| Scenario                                                        | Config                                       | Result                                    |
-|-----------------------------------------------------------------|----------------------------------------------|-------------------------------------------|
+| Scenario                                                        | Config                                         | Result                                    |
+|-----------------------------------------------------------------|------------------------------------------------|-------------------------------------------|
 | `qwen3-235b-a22b-fp8` on 4× L40 48 GB (`dll-4gpu3`, 503 GB RAM) | `TENSOR_PARALLEL_SIZE=4` `CPU_OFFLOAD_GB=auto` | ~85 GB spill; hardware FP8 (CC 8.9)       |
-| `qwen3-235b-a22b-fp8` on 8× A100 40 GB (`tdll-8gpu`)            | `TENSOR_PARALLEL_SIZE=8`                     | fits — `auto` resolves to 0               |
-| `llama3.1-70b` (BF16) on one 48 GB card                         | `BACKEND=vllm` `CPU_OFFLOAD_GB=auto`         | ~105 GB spill to CPU RAM (`--mem ≥ 145G`) |
+| `qwen3-235b-a22b-fp8` on 8× A100 40 GB (`tdll-8gpu`)            | `TENSOR_PARALLEL_SIZE=8`                       | fits — `auto` resolves to 0               |
+| `llama3.1-70b` (BF16) on one 48 GB card                         | `BACKEND=vllm` `CPU_OFFLOAD_GB=auto`           | ~105 GB spill to CPU RAM (`--mem ≥ 145G`) |
 
 SLURM sizing: when offloading, drop the big-VRAM constraint (e.g.
 `--constraint="gpuram48G|gpuram40G"`) so the job can schedule on any GPU node, and raise `--mem`
@@ -552,9 +552,12 @@ docker run atrium-llm-enrich:remote ollama_client.py --host http://host.docker.i
 ```
 
 > [!NOTE]
-> A `docker-compose.gpu.yaml` with GPU reservations (matching `atrium-nlp-enrich`'s pattern) is
-> not yet present in this repo — currently plain `docker run --gpus all` (above) or manual
-> Compose GPU device reservations are the way to run the `llm` image with GPU access.
+> `docker-compose.gpu.yaml` now exists in this repo (GPU reservations for the `llm-enrich-llm`
+> service, matching `atrium-nlp-enrich`'s pattern):
+> ```
+> docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml --profile llm run --rm llm-enrich-llm
+> ```
+> The plain `docker run --gpus all` commands above still work as a Compose-free alternative.
 
 ## Paradata Logs
 
