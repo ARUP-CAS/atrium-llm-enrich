@@ -57,7 +57,8 @@ jobs:
       # (llm), not the base layer. Including "base" here would publish the
       # llm image a second time under the unsuffixed tag instead of a real
       # lean base image. base has no ENTRYPOINT and is not meant to be run
-      # standalone — only remote and llm are publishable targets. (Targets now
+      # standalone — remote, llm, digital and api are all publishable targets now,
+      # not just remote and llm as when this note was first written. (Targets now
       # pass through verbatim, so listing "base" would build the real base
       # stage — still pointless here, so it stays excluded.)
       # W8: "digital" added. api_util/digital_to_json.py (808 lines, PROGRAM =
@@ -67,9 +68,6 @@ jobs:
       # two-originator path (scan vs born-digital) was reachable only through unit
       # tests inside this repo. That is the "needs a published image" blocker on the
       # sixth E2E stage.
-      #
-      # Still declared-but-unpublished: the `api` stage. Same failure mode, older and
-      # pre-existing; flagged rather than fixed here so this change stays reviewable.
       build-targets: '["remote", "llm", "digital", "api"]'
       # issue #55: `api` was declared in the Dockerfile but never built or published
       # (roadmap B5), so ghcr.io/ufal/atrium-llm-enrich-api did not exist at any tag and
