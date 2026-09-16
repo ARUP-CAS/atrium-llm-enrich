@@ -834,7 +834,28 @@ def prepare_document_input(path: Path, cache_dir: Optional[Path] = None, ocr: bo
     if not is_convertible_input(path):
         return path
 
-    from api_util.doc_to_visual_md import convert_to_visual_md
+    # Guarded, and deliberately forward-mergeable: this same code is correct on the
+    # default branch and on `agent-skill`, so it creates no drift for
+    # tools/skill_drift_check.py to report (agent_skill_strategy.md §5 calls for exactly
+    # this shape rather than a permanent skill-branch fork).
+    #
+    # The skill branch is a LIGHTWEIGHT client by design -- its SKILL.md advertises text,
+    # *.document.json and ALTO XML (via api_util/xml_to_md.py) and nothing else, so it
+    # does not carry api_util/doc_to_visual_md.py or the docx_to_md / json_to_md /
+    # pdf_to_md chain behind it, nor their pymupdf / python-docx dependencies. Without
+    # this guard, feeding it a PDF produced a bare
+    # `ModuleNotFoundError: No module named 'api_util.doc_to_visual_md'` from inside a
+    # function whose docstring promises the conversion -- which reads as a broken install
+    # rather than a capability this branch does not have.
+    try:
+        from api_util.doc_to_visual_md import convert_to_visual_md
+    except ImportError as exc:
+        raise RuntimeError(
+            f"cannot convert {path.name}: this build does not carry the born-digital "
+            "converter (api_util/doc_to_visual_md.py and the docx/json/pdf chain behind "
+            "it). Convert to Markdown, plain text or ALTO XML upstream and feed that "
+            "instead -- see SKILL.md for the accepted inputs."
+        ) from exc
 
     cache = Path(cache_dir) if cache_dir else path.parent / "_visual_md_cache"
     cache.mkdir(parents=True, exist_ok=True)

@@ -24,27 +24,97 @@ services:
     #   docker compose --profile remote run --rm llm-enrich-remote \
     #     ollama_client.py --input /data/sample.csv --model qwen2.5:7b
 
+  # W8: the born-digital originator. Takes a PDF/DOCX and PRODUCES an
+  # atrium_document record — it consumes no --document-json baseline, because it is
+  # the start of the born-digital branch, not a stage in the scanned chain.
+  llm-enrich-digital:
+    profiles: [digital]
+    image: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-digital
+    build:
+      context: .
+      target: digital
+      args:
+        ATRIUM_RUNNER_IMAGE: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-digital
+        ATRIUM_RUNNER_REPO: https://github.com/ufal/atrium-llm-enrich
+        ATRIUM_RUNNER_REF: ${ATRIUM_RUNNER_REF:-dev}
+    environment:
+      ATRIUM_RUNNER_IMAGE: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-digital
+      ATRIUM_RUNNER_REPO: https://github.com/ufal/atrium-llm-enrich
+      ATRIUM_RUNNER_REF: ${ATRIUM_RUNNER_REF:-dev}
+    volumes:
+      - ./data:/data
+    # ENTRYPOINT is api_util/digital_to_json.py, so pass its args directly:
+    #   docker compose --profile digital run --rm llm-enrich-digital \
+    #     /data/report.pdf --document-json-out /data/report.document.json
+
+  llm-enrich-llm:
+    profiles: [llm]
+    image: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-llm
+    build:
+      context: .
+      target: llm
+      args:
+        ATRIUM_RUNNER_IMAGE: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-llm
+        ATRIUM_RUNNER_REPO: https://github.com/ufal/atrium-llm-enrich
+        ATRIUM_RUNNER_REF: ${ATRIUM_RUNNER_REF:-dev}
+    environment:
+      ATRIUM_RUNNER_IMAGE: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-llm
+      ATRIUM_RUNNER_REPO: https://github.com/ufal/atrium-llm-enrich
+      ATRIUM_RUNNER_REF: ${ATRIUM_RUNNER_REF:-dev}
+      HF_HOME: /cache/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ./data:/data
+      - hf-cache:/cache/huggingface
+      - ./llm_config.txt:/app/llm_config.txt:ro
+
+  # FastAPI meta-contract service (strategy §4), port 8000. Wraps the torch-free
+  # remote/lightweight engine — set LLM_BACKEND + the backend's key/model to enable
+  # extraction; /info and /health stay up (ready:false) until then.
   llm-enrich-api:
     profiles: [api]
     image: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-api
     build:
       context: .
       target: api
-      args:
-        ATRIUM_RUNNER_IMAGE: ghcr.io/ufal/atrium-llm-enrich:${ATRIUM_VERSION:-dev}-api
-        ATRIUM_RUNNER_REPO: https://github.com/ufal/atrium-llm-enrich
-        ATRIUM_RUNNER_REF: ${ATRIUM_RUNNER_REF:-dev}
+    # env_file delivers every OTHER variable in .env.example into the container --
+    # LOG_LEVEL, GRACEFUL_SHUTDOWN_S, HOST, RELOAD, HEALTHCHECK_PATH, LLM_TIMEOUT,
+    # LLM_MAX_RETRIES, LLM_CONFIG and the OpenRouter attribution headers were all
+    # documented but undeliverable under compose until atrium-project#60 added this.
+    # `required: false` because .env is gitignored -- a fresh clone has none and
+    # compose must still start. The explicit environment: entries below are KEPT
+    # because they need a value DIFFERENT from a bare pass-through: compose itself
+    # needs PORT for the ports: mapping below, and OLLAMA_HOST's compose default
+    # (host.docker.internal) deliberately differs from the code default
+    # (localhost, which is wrong inside a container) -- see docs/k8s_deployment.md's
+    # "two defaults" callout in the hub.
+    env_file:
+      - path: .env
+        required: false
     environment:
+      LLM_BACKEND: ${LLM_BACKEND:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      BACKEND: ${BACKEND:-openrouter}
-      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      PORT: ${PORT:-8000}
+    ports:
+    # PORT is passed through so `PORT=9000 docker compose --profile api up` moves the
+    # listener, the published port and the container's own HEALTHCHECK together — the
+    # service reads it in service/api.py's __main__ block and service/healthcheck.py
+    # probes it. (atrium-project#58)
+      - "${PORT:-8000}:${PORT:-8000}"
     volumes:
       - ./data:/data
       - ./llm_config.txt:/app/llm_config.txt:ro
-    ports:
-      - "8000:8000"
+    # HEALTHCHECK comes from the `api` Dockerfile stage — no override needed here.
+    # stop_grace_period raised from Compose's 10s default (issue #55): the ENTRYPOINT
+    # allows uvicorn 20s to drain in-flight requests and serve_lifecycle up to another
+    # 25s after that, so 10s would SIGKILL mid-drain. Matches the grace budget in
+    # atrium-project/docs/templates/k8s/atrium-service.deployment.yaml.
+    stop_grace_period: 60s
 
-# The local multi-GPU (transformers/vLLM) `llm` image + profile live on the
-# development branch; this agent-skill branch is torch-free and API-only.
+volumes:
+  hf-cache:
