@@ -131,9 +131,13 @@ Format: `[type] concise description of what changed`
   `llm_client_shared.py` by hand (see that module's docstring) — and update
   `tests/test_llm_client_shared.py` to cover it.
 * **Engine files stay untouched:** `llm_utils.py`, `vocab_manager.py`, `atrium_paradata.py`,
-  `para_licenses.py`, and the `api_util/{teitok_read,teitok_alto,flexiconv_convert,bbox_scale}.py`
+  `para_licenses.py`, and the `api_util/{teitok_read,flexiconv_convert,bbox_scale}.py`
   files are copied verbatim from `atrium-nlp-enrich` — do not fork their logic locally; a repo
-  drift-check (`para-drift.yml`) enforces this for the paradata pair.
+  drift-check (`para-drift.yml`) enforces this for the paradata pair, and
+  `tests/test_vendored_teitok_parity.py` pins the SHA-256 of the TEITOK files (plus
+  `requirements_flexiconv.txt`, `tests/test_flexiconv_convert.py` and the flexiconv fixtures),
+  with the re-vendoring procedure in its docstring. This repo only *reads* TEITOK: the writer
+  (`teitok_alto.py`) lives in nlp-enrich alone.
 
 ### Minimum checks before every commit
 ```bash

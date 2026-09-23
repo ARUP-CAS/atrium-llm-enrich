@@ -64,10 +64,14 @@ pip install -r requirements_llm.txt
 # Remote (OpenRouter) or lightweight-local (Ollama) — no torch/vllm/bitsandbytes
 pip install -r requirements_remote.txt
 ```
-*(Optional) For non-ALTO/non-TEITOK text input (txt/pdf/docx/html/md) via `flexiconv`:*
+*(Optional) For non-ALTO/non-TEITOK text input (txt/pdf/docx/html/md, PAGE XML, hOCR) via
+`flexiconv` (GPL-3.0-or-later; pinned `v0.3.10` with its format extras):*
 ```bash
 pip install -r requirements_flexiconv.txt
+python3 api_util/flexiconv_convert.py input.docx --out-dir TEITOK_IN/   # -> TEITOK_IN/input.teitok.xml
 ```
+flexiconv's TEITOK has no sentences: the reader turns it into one row per text line (PAGE XML,
+hOCR, ALTO) or per paragraph/heading (plain formats), with no lemmas or tags.
 *(Optional) For visually-rich Markdown from DOCX / PDF inputs
 ([`api_util/doc_to_visual_md.py`](api_util/doc_to_visual_md.py), see
 [below](#visually-rich-document-input-api_utildoc_to_visual_mdpy)):*
@@ -409,7 +413,9 @@ has no offload path; for over-VRAM models the supported answer is `BACKEND=vllm`
 
 * **Input (local & remote/lightweight-local, line-level):** `INPUT_DIR/*.csv` or
   `*.teitok.xml` — expects `file_id`/`page_num`/`line_num`/`categ`/`quality_score`/`text` columns
-  (CSV) or TEITOK's native `pb`/`lb`/`s` structure.
+  (CSV) or TEITOK's native `pb`/`lb`/`s` structure. One row per `<s>` (nlp-enrich output);
+  documents without `<s>` (flexiconv output) give one row per `<lb/>` line or text block. Reader:
+  [`api_util/teitok_read.py`](api_util/teitok_read.py) 📎, vendored verbatim from atrium-nlp-enrich.
 * **Input (remote/lightweight-local, document-level):** `.md`/`.txt` (from
   [`api_util/xml_to_md.py`](api_util/xml_to_md.py) 📎), or `.pdf`/`.docx` auto-converted to
   visually-rich Markdown by [`api_util/doc_to_visual_md.py`](api_util/doc_to_visual_md.py) 📎.

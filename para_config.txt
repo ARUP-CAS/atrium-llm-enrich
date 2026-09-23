@@ -34,6 +34,13 @@ pdfplumber  = MIT ; conditional ; digital-born PDF geometry (char/word/line bbox
 python-docx = MIT ; conditional ; DOCX paragraph/run/table/style structure
 docx2python = MIT ; conditional ; DOCX fallback for headers/footers/core-properties
 #
+# ── flexiconv (optional; api_util/flexiconv_convert.py, vendored from nlp-enrich) ─
+# Declares GPL-3.0-or-later in its pyproject.toml (checked at the pinned v0.3.10; the
+# repository has no LICENSE file); para_licenses folds "-or-later" into GPL-3.0. Same row
+# as atrium-nlp-enrich's para_config.txt. Conditional: it only constrains runs that
+# actually convert documents with it.
+flexiconv   = GPL-3.0 ; conditional ; flexiconv document -> TEITOK converter (api_util/flexiconv_convert.py)
+#
 # ── controlled vocabularies (issue nlp-enrich#6) ─────────────────────────────
 # The AMCR heslar and the TEATER thesaurus are both CC BY-NC 4.0 (AMCR's OAI
 # Identify response carries a rightsReference to by-nc/4.0; TEATER declares the
@@ -69,9 +76,9 @@ teater_data = CC BY-NC 4.0 ; conditional ; TEATER thesaurus data (vocab_sources.
 #     prompts/completions, but does not by itself resolve licensing.
 #   * BACKEND=ollama — locally-served model, same per-model variability as
 #     the transformers/vllm case above.
-#   * flexiconv (api_util/flexiconv_convert.py) — license not yet checked
-#     against project policy; flag before enabling txt/pdf/docx conversion
-#     in a shared/production run.
+#   * flexiconv — licence checked 2026-09-23 (GPL-3.0-or-later, row above). Whether a
+#     GPL-3.0 conditional component is acceptable for a shared/production run is a
+#     project-policy decision, not an unknown.
 # Until this is reviewed, ParadataLogger falls back to its conservative
 # default (CC BY-NC 4.0) whenever no components are logged — see
 # atrium_paradata.py:_license_block().

@@ -136,8 +136,10 @@ def test_read_teitok_tokens(sample_teitok):
     # Check spaceAfter="No" mapped properly
     assert tokens[3]["space_after"] is False
 
-    # Check fallback to @type for UPOS if @pos is missing
-    assert tokens[7] == {"form": "text", "lemma": "text", "upos": "attr", "space_after": True}
+    # @pos is the UPOS fallback when @upos is missing (TEITOK projects often call it so);
+    # @type never is -- it is the word/punctuation flag ("w"/"pc"), so it used to turn
+    # every token of real TEITOK output into upos "w" or "pc".
+    assert tokens[7] == {"form": "text", "lemma": "text", "upos": "", "space_after": True}
 
 
 # ── Regression: <pb n="..."> with a non-numeric label (issue #13 TODO — ────
@@ -166,26 +168,31 @@ def test_read_teitok_rows_survives_non_numeric_pb_n(tmp_path):
     rows = read_teitok_rows(p)
 
     assert [r["text"] for r in rows] == ["Titulni strana.", "Skutecny obsah."]
-    # n="I" doesn't parse -> falls back to incrementing the running counter
-    # (1 -> 2), the same fallback already used for a missing @n. The next
-    # <pb n="1"> then parses normally and is taken at face value -- page
-    # numbers aren't guaranteed monotonic across a non-numeric label, which
-    # is an accepted, documented limitation of the fallback (full roman-
-    # numeral parsing is out of scope here); not crashing is the contract.
-    assert rows[0]["page_num"] == 2
+    # n="I" doesn't parse. The document's first <pb> is page 1 whatever its label; a later
+    # unparseable label advances the running counter. The next <pb n="1"> parses and is
+    # taken at face value -- the usual archival pattern (roman front matter, then arabic
+    # numbering starting at 1). Page numbers aren't guaranteed unique across a non-numeric
+    # label (full roman-numeral parsing is out of scope); not crashing is the contract.
+    assert rows[0]["page_num"] == 1
     assert rows[1]["page_num"] == 1
 
 
-def test_read_teitok_rows_pb_missing_n_still_increments(tmp_path):
-    """Existing behavior (missing @n falls back to page_num + 1) must be
-    unchanged by the new non-numeric-label handling."""
+def test_read_teitok_rows_pb_missing_n(tmp_path):
+    """A missing @n: the first <pb> is page 1 (flexiconv writes <pb> without @n, and a
+    one-page document used to come out as page 2), later ones advance the counter."""
     p = tmp_path / "missing_n.teitok.xml"
     p.write_text(
         '<TEI><text><body><div><pb/><s text="Only page."/></div></body></text></TEI>',
         encoding="utf-8",
     )
     rows = read_teitok_rows(p)
-    assert rows == [{"page_num": 2, "line_num": 1, "text": "Only page."}]
+    assert rows == [{"page_num": 1, "line_num": 1, "text": "Only page."}]
+
+    p.write_text(
+        '<TEI><text><body><div><pb/><s text="One."/><pb/><s text="Two."/></div></body></text></TEI>',
+        encoding="utf-8",
+    )
+    assert [r["page_num"] for r in read_teitok_rows(p)] == [1, 2]
 
 
 # ── Regression: <name>...</n> mis-close (issue #13 §D.2's own flagged ──────
@@ -221,10 +228,15 @@ def test_read_teitok_tokens_survives_name_misclose(tmp_path):
     the parse-level fix from the pb-parsing fix."""
     p = tmp_path / "misclose.teitok.xml"
     p.write_text(NAME_MISCLOSE_SAMPLE, encoding="utf-8")
-    # Must not raise; a <name> element has no <tok> children in this fixture
-    # so the token list is legitimately empty -- the assertion that matters
-    # is that parsing completes at all.
-    assert read_teitok_tokens(p) == []
+    # Must not raise. The fixture has no <tok>, so the tokens are the sentence text split
+    # on whitespace (with empty lemma/upos), as for any untokenized TEITOK document.
+    assert [t["form"] for t in read_teitok_tokens(p)] == [
+        "Vyzkum",
+        "odhalil",
+        "zaklady",
+        "gotickeho",
+        "kostela",
+    ]
 
 
 def test_parse_teitok_is_noop_for_well_formed_input(sample_teitok):
@@ -235,3 +247,46 @@ def test_parse_teitok_is_noop_for_well_formed_input(sample_teitok):
     # Same content read_teitok_rows() already exercises via ET.parse directly
     # elsewhere in this file -- three <s> texts/reconstructions, two pages.
     assert [e.get("n") for e in root.iter() if e.tag.split("}")[-1] == "pb"] == ["1", "2"]
+
+
+# ── Upstream TEITOK shapes: real flexiconv v0.3.10 output (fixtures shared with nlp-enrich) ──
+# flexiconv writes no <s>: plain formats become <p>/<head>/<item> text, layout formats
+# (PAGE XML, hOCR, ALTO) become <tok bbox> + <lb/> without sentences. Before the canonical
+# reader was vendored, every such document read as zero rows here.
+
+FLEXICONV_FIXTURES = Path(__file__).parent / "fixtures" / "teitok" / "flexiconv"
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("txt", ["Výzkum proběhl v Praze. Nalezeno 12 střepů.", "Druhý odstavec textu."]),
+        ("md", ["Nadpis zprávy", "První odstavec důležitý.", "položka seznamu"]),
+        ("page", ["Výzkum proběhl v Praze.", "Nalezeno 12 střepů."]),
+        ("hocr", ["METHODIUS", "AN (ZU) SISTELIUS, UBER DEN AUSSATZ", "Methodius. 99"]),
+        ("alto", ["The cat sat here."]),
+    ],
+)
+def test_flexiconv_output_yields_rows(name, expected):
+    rows = read_teitok_rows(FLEXICONV_FIXTURES / f"{name}.teitok.xml")
+    assert [r["text"] for r in rows] == expected
+
+
+def test_text_faithful_spacing_and_multiword_tokens(tmp_path):
+    """Whitespace between tokens is the space (no join attribute needed); <dtok> words of a
+    multi-word token never add text."""
+    p = tmp_path / "mwt.teitok.xml"
+    p.write_text(
+        '<TEI><text><s id="s-1"><tok id="w-1">Praze</tok><tok id="w-2">,</tok> '
+        '<tok id="w-3">abych<dtok id="w-3.1" form="aby"/><dtok id="w-3.2" form="bych"/></tok> '
+        '<tok id="w-4">šel</tok></s></text></TEI>',
+        encoding="utf-8",
+    )
+    assert read_teitok_rows(p)[0]["text"] == "Praze, abych šel"
+    tokens = read_teitok_tokens(p)
+    assert [(t["form"], t["space_after"]) for t in tokens] == [
+        ("Praze", False),
+        (",", True),
+        ("abych", True),
+        ("šel", True),
+    ]

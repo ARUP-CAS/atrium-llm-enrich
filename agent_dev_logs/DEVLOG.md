@@ -207,6 +207,20 @@ avoid already caught and fixed. The active thread is the vocabulary/prompt align
 repo has no issue of its own for that work, so its state should be read alongside nlp-enrich's DEVLOG rather than
 this repo's issue tracker. #24 (olmOCR) is a fresh, unstarted lead on the still-deferred OCR path from #10.
 
+## 2026-09-23
+
+* **TEITOK / flexiconv (nlp-enrich #9/#10/#28 umbrella, Stage 5; branch `claude/inspiring-cerf-2gdtd1`, local).**
+  * `api_util/teitok_read.py` and `api_util/flexiconv_convert.py` are re-vendored verbatim from atrium-nlp-enrich,
+    together with `requirements_flexiconv.txt`, `tests/test_flexiconv_convert.py` and the real flexiconv v0.3.10
+    fixtures. `tests/test_vendored_teitok_parity.py` pins their SHA-256 and compares them with a sibling nlp-enrich
+    checkout when one exists.
+  * The reader now handles flexiconv output (no `<s>`) and text-faithful spacing. It also ignores `<dtok>` and no
+    longer takes UPOS from `@type`; `tests/test_teitok_read.py` was adapted accordingly (first `<pb>` = page 1).
+  * The stale `api_util/teitok_alto.py` writer fork, its copied tests and their CoNLL-U fixtures are deleted.
+  * `xml_to_md.py` uses `sentence_text()` / `pb_page_number()` and reads documents without `<s>`.
+  * `para_config.txt` records flexiconv as GPL-3.0 (conditional); README / CONTRIBUTING updated.
+  * `pytest -m "not slow"`: 935 passed, 18 environment-only skips. #10/#13 dev logs updated.
+
 ---
 _Timeline index refreshed 2026-09-07 against live `test`/`main` HEAD, the `CONTRIBUTING.md` changelog table, and
 open-issue state via the GitHub API. Nothing removed from the issues themselves (per hub #29); this file is a

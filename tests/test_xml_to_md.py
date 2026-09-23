@@ -6,6 +6,8 @@ converter that feeds the whole-document input path (BACKEND=openrouter/
 ollama, .md/.txt input) via run_document_level() in llm_client_shared.py.
 """
 
+from pathlib import Path
+
 from api_util.xml_to_md import (
     _read_alto_rows,
     _read_teitok_layout,
@@ -331,3 +333,26 @@ def test_convert_text_has_no_markdown_headings(tmp_path):
     txt = convert(p, fmt="text")
     assert "#" not in txt
     assert "Prvni veta na strance." in txt
+
+
+def test_read_teitok_layout_sentence_without_text_keeps_real_spacing(tmp_path):
+    """<s> without @text: the text comes from the tokens with the document's own spacing
+    (whitespace between tokens), not from join="right" alone, and <dtok> adds nothing."""
+    p = tmp_path / "spacing.teitok.xml"
+    p.write_text(
+        '<TEI><text><body><div><pb n="1"/><s id="s-1"><tok id="w-1">č</tok><tok id="w-2">.</tok> '
+        '<tok id="w-3">5</tok> <tok id="w-4">abych<dtok id="w-4.1" form="aby"/>'
+        '<dtok id="w-4.2" form="bych"/></tok></s></div></body></text></TEI>',
+        encoding="utf-8",
+    )
+    rows, _pages = _read_teitok_layout(p)
+    assert [r["text"] for r in rows] == ["č. 5 abych"]
+
+
+def test_read_teitok_layout_reads_flexiconv_output_without_sentences(tmp_path):
+    """flexiconv's TEITOK has no <s>; the layout reader used to return no rows for it."""
+    fixture = Path(__file__).parent / "fixtures" / "teitok" / "flexiconv" / "page.teitok.xml"
+    rows, pages = _read_teitok_layout(fixture)
+    assert [r["text"] for r in rows] == ["Výzkum proběhl v Praze.", "Nalezeno 12 střepů."]
+    assert all(r["bbox"] is None for r in rows)
+    assert 1 in pages

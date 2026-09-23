@@ -11,11 +11,11 @@ Builds on teitok_read.py (TEITOK) and a small, dependency-free ALTO reader
 below, following teitok_read.read_teitok_rows()'s row shape
 ({"page_num", "line_num", "text"}) so both formats feed the same renderer.
 
-Note: teitok_alto.py's ``_parse_alto`` is intentionally NOT reused here — it
-is module-private, tightly coupled to the CoNLL-U+NER merge pipeline
-(``write_teitok_merged``), and returns bbox/image metadata this converter
-doesn't need. ``_read_alto_rows`` below extracts only String/TextLine text,
-mirroring the namespace-agnostic parsing style already used in that module.
+Note: the ALTO parser of atrium-nlp-enrich's TEITOK writer (``teitok_alto.py``,
+not vendored here — this repo only reads TEITOK) is intentionally NOT reused: it
+is tightly coupled to the CoNLL-U+NER merge pipeline and returns bbox/image
+metadata this converter doesn't need. ``_read_alto_rows`` below extracts only
+String/TextLine text, in the same namespace-agnostic parsing style.
 """
 
 import argparse
@@ -29,7 +29,13 @@ if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
 from api_util import layout_md as L  # noqa: E402
-from api_util.teitok_read import doc_id_from_path, parse_teitok, read_teitok_rows  # noqa: E402
+from api_util.teitok_read import (  # noqa: E402
+    doc_id_from_path,
+    parse_teitok,
+    pb_page_number,
+    read_teitok_rows,
+    sentence_text,
+)
 
 
 def _local_tag(elem: ET.Element) -> str:
@@ -186,10 +192,13 @@ def _read_alto_layout(path: str | Path) -> tuple:
 def _read_teitok_layout(path: str | Path) -> tuple:
     """TEITOK → (rows, pages) with coordinates.
 
-    Mirrors teitok_read.read_teitok_rows()'s page/line/text logic, plus a
-    per-sentence ``bbox`` (aggregated from child ``<tok bbox>``), page canvas
-    dimensions from ``<surface lrx lry>`` (in document order), and figure
-    regions from ``<figure bbox type>``.
+    Mirrors teitok_read.read_teitok_rows()'s page/line/text logic (page numbers via
+    ``teitok_read.pb_page_number``, sentence text via ``teitok_read.sentence_text``, which
+    keeps the document's own spacing and ignores ``<dtok>``), plus a per-sentence ``bbox``
+    (aggregated from child ``<tok bbox>``), page canvas dimensions from
+    ``<surface lrx lry>`` (in document order), and figure regions from
+    ``<figure bbox type>``. Documents without ``<s>`` (flexiconv output) get
+    teitok_read's line/block rows, without a bbox.
     """
     root = parse_teitok(path)
     rows: List[dict] = []
@@ -199,6 +208,7 @@ def _read_teitok_layout(path: str | Path) -> tuple:
     page_num = 1
     line_num = 1
     page_order: List[int] = []
+    has_sentences = False
     pages.setdefault(page_num, {"width": None, "height": None, "figures": []})
 
     for elem in root.iter():
@@ -213,13 +223,9 @@ def _read_teitok_layout(path: str | Path) -> tuple:
         elif tag == "pb":
             # `n` is usually a plain page count, but archival front matter /
             # appendices legitimately use roman numerals or other non-numeric
-            # labels (e.g. n="I") — fall back to a simple increment rather
-            # than crashing on int(), mirroring the ALTO reader's existing
-            # handling of an unparseable PHYSICAL_IMG_NR just below.
-            try:
-                page_num = int(elem.get("n", page_num + 1))
-            except (TypeError, ValueError):
-                page_num += 1
+            # labels (e.g. n="I"), and converters often omit it: the shared rule
+            # (the first <pb> is page 1, later ones advance) instead of int().
+            page_num = pb_page_number(elem, page_num, first=not page_order)
             pages.setdefault(page_num, {"width": None, "height": None, "figures": []})
             page_order.append(page_num)
         elif tag == "lb":
@@ -229,15 +235,8 @@ def _read_teitok_layout(path: str | Path) -> tuple:
             if box:
                 pages[page_num]["figures"].append({"bbox": box, "type": elem.get("type", "")})
         elif tag == "s":
-            text = elem.get("text")
-            if not text:
-                toks = []
-                for tok in elem.iter():
-                    if _local_tag(tok) == "tok":
-                        toks.append(tok.text or "")
-                        if tok.get("join") != "right" and tok.get("spaceAfter") != "No":
-                            toks.append(" ")
-                text = "".join(toks).strip()
+            has_sentences = True
+            text = sentence_text(elem)
             if not text:
                 continue
             boxes = [
@@ -255,6 +254,11 @@ def _read_teitok_layout(path: str | Path) -> tuple:
                     max(b[3] for b in boxes),
                 ]
             rows.append({"page_num": page_num, "line_num": line_num, "text": text, "bbox": bbox})
+
+    if not has_sentences:
+        rows = [dict(row, bbox=None) for row in read_teitok_rows(path)]
+        for row in rows:
+            pages.setdefault(row["page_num"], {"width": None, "height": None, "figures": []})
 
     # Surfaces are written one-per-page, in the same document order that
     # <pb> elements introduce pages — align positionally against THAT order,
